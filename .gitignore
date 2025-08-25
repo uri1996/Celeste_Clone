@@ -1,0 +1,29 @@
+ECHO ÇÕ <ON> Ç≈Ç∑ÅB
+# Visual Studio specific
+.vs/
+*.VC.db
+*.VC.opendb
+*.user
+*.suo
+*.ipch
+
+# Build directories
+Debug/
+Release/
+x64/
+x86/
+
+# Compiled files
+*.exe
+*.dll
+*.lib
+*.exp
+*.pdb
+*.obj
+*.ilk
+*.idb
+*.tlog
+*.lastbuildstate
+
+# Git-specific
+.git/
