@@ -1,3 +1,5 @@
+#include"Pipa_lib.h"
+
 // windows platform
 #ifdef _WIN32
 
@@ -87,6 +89,11 @@ int main()
 	{
 		// update
 		platform_update_window();
+
+		SM_TRACE("TEST");
+		SM_WARN("TEST");
+		SM_ERROR("TEST");
+		SM_ASSERT(false, "Assertion not Hit!");
 	}
 	return 0;
 }

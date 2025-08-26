@@ -1,8 +1,15 @@
 #pragma once
 
 #include<stdio.h>
+#include<stdlib.h>		// get malloc
+#include<string>		// get memset
+#include<sys/stat.h>	// used to get the edit timestamp of files
 
 // defines
+#ifdef _WIN32
+#define DEBUG_BREAK() __debugbreak()
+#endif
+
 
 // logging
 enum TextColor
@@ -27,7 +34,167 @@ enum TextColor
 };
 
 template<typename ...Args>
-void _log(char* prefix, char* msg, TextColor textColor, Args... args)
+void _log(const char* prefix, const char* msg, TextColor textColor, Args... args)
 {
-	"\x1b[30m" + msg + "\033[0m";	// This is black text
+	static const char* TextColorTable[TEXT_COLOR_COUNT] =
+	{
+		"\x1b[30m", // TEXT_COLOR_BLACK
+		"\x1b[31m", // TEXT_COLOR_RED
+		"\x1b[32m", // TEXT_COLOR_GREEN
+		"\x1b[33m", // TEXT_COLOR_YELLOW
+		"\x1b[34m", // TEXT_COLOR_BLUE
+		"\x1b[35m", // TEXT_COLOR_MAGENTA
+		"\x1b[36m", // TEXT_COLOR_CYAN
+		"\x1b[37m", // TEXT_COLOR_WHITE
+		"\x1b[90m", // TEXT_COLOR_BRIGHT_BLACK
+		"\x1b[91m", // TEXT_COLOR_BRIGHT_RED
+		"\x1b[92m", // TEXT_COLOR_BRIGHT_GREEN
+		"\x1b[93m", // TEXT_COLOR_BRIGHT_YELLOW
+		"\x1b[94m", // TEXT_COLOR_BRIGHT_BLUE
+		"\x1b[95m", // TEXT_COLOR_BRIGHT_MAGENTA
+		"\x1b[96m", // TEXT_COLOR_BRIGHT_CYAN
+		"\x1b[97m", // TEXT_COLOR_BRIGHT_WHITE
+	};
+
+	char formatBuffer[8192] = {};
+	sprintf_s(formatBuffer, "%s %s %s \033[0m", TextColorTable[textColor], prefix, msg);
+
+	char textBuffer[8192] = {};
+	sprintf_s(textBuffer, formatBuffer, args...);
+
+	puts(textBuffer);
+}
+
+#define SM_TRACE(msg, ...) _log("TRACE: ", msg, TEXT_COLOR_GREEN, __VA_ARGS__);
+#define SM_WARN(msg, ...) _log("WARN: ", msg, TEXT_COLOR_YELLOW, __VA_ARGS__);
+#define SM_ERROR(msg, ...) _log("ERROR: ", msg, TEXT_COLOR_RED, __VA_ARGS__);
+
+#define SM_ASSERT(x, msg, ...)			\
+{										\
+	if(!(x))							\
+	{									\
+		SM_ERROR(msg, __VA_ARGS__);		\
+		DEBUG_BREAK();					\
+		SM_ERROR("Assertion HIT!");		\
+	}									\
+}										\
+
+// Bump Allocator
+
+struct BumpAllocator
+{
+	size_t capacity;
+	size_t used;
+	char* memory;
+};
+
+BumpAllocator make_bump_allocator(size_t size)
+{
+	BumpAllocator ba = {};
+
+	ba.memory = (char*)malloc(size);
+	if (ba.memory)
+	{
+		ba.capacity = size;
+		memset(ba.memory, 0, size); // sets the memory to 0
+	}
+	else
+	{
+		SM_ASSERT(false, "Failed to allocate Memory!");
+	}
+
+	return ba;
+}
+
+char* bump_alloc(BumpAllocator* bumpAllocator, size_t size)
+{
+	char* result = nullptr;
+
+	size_t allignedSize = (size + 7) & ~7; // this makes sure the first 4 bits are 0
+
+	if (bumpAllocator->used + allignedSize <= bumpAllocator->capacity)
+	{
+		result = bumpAllocator->memory + bumpAllocator->used;
+		bumpAllocator->used += allignedSize;
+	}
+	else
+	{
+		SM_ASSERT(false, "BumpAllocator is full");
+	}
+
+	return result;
+}
+
+// File I/O
+
+long long get_timestamp(const char* file)
+{
+	struct stat file_stat = {};
+	stat(file, &file_stat);
+	return file_stat.st_mtime;	// time in ms when the file was created
+}
+
+bool file_exists(const char* filepath)
+{
+	SM_ASSERT(filepath, "No filePath supplied!");
+
+	FILE* file = nullptr;
+	fopen_s(&file, filepath, "rb");
+	if (!file)
+	{
+		return false;
+	}
+	fclose(file);
+	return true;
+}
+
+long get_file_size(const char* filepath)
+{
+	SM_ASSERT(filepath, "No filepath supplied!");
+
+	long fileSize = 0;
+	FILE* file = nullptr;
+	fopen_s(&file, filepath, "rb");
+	if (!file)
+	{
+		SM_ERROR("Failed opening file: %s", filepath);
+		return 0;
+	}
+
+	fseek(file, 0, SEEK_END);
+	fileSize = ftell(file);
+	fseek(file, 0, SEEK_SET);
+	fclose(file);
+
+	return fileSize;
+}
+
+// Reads a file into a supplied buffer. We manage our own
+// memory and therefore want more control over where it 
+// is allocated
+
+char* read_file(const char* filepath, int* fileSize, char* buffer)
+{
+	SM_ASSERT(filepath, "No filepath supplied!");
+	SM_ASSERT(fileSize, "No fileSize supplied!");
+	SM_ASSERT(buffer, "No buffer supllied!");
+
+	*fileSize = 0;
+	FILE* file = nullptr;
+	fopen_s(&file, filepath, "rb");
+	if (!file)
+	{
+		SM_ERROR("Failed opening file: %s", filepath);
+		return nullptr;
+	}
+
+	fseek(file, 0, SEEK_END);
+	*fileSize = ftell(file);
+	fseek(file, 0, SEEK_SET);
+
+	memset(buffer, 0, *fileSize);
+	fread(buffer, sizeof(char), *fileSize, file);
+
+	fclose(file);
+	return buffer;
 }
